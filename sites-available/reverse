@@ -1,0 +1,63 @@
+limit_req_zone $binary_remote_addr zone=kovic_client_limit:10m rate=5r/s;
+limit_req_zone $server_name zone=kovic_server_limit:10m rate=10r/s;
+limit_req_status 429;
+
+upstream koviccluster {
+		ip_hash;
+		server 127.0.0.1:5928 max_fails=3 fail_timeout=60s;
+		server 127.0.0.1:2901 max_fails=3 fail_timeout=60s;
+		server 127.0.0.1:3949 max_fails=3 fail_timeout=60s;
+	}
+
+proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=mycache:10m inactive=1h loader_threshold=300 loader_files=50;
+proxy_cache_methods GET HEAD;
+proxy_cache_min_uses 1;
+
+server {
+	#listen 80;
+	#listen [::]:80;
+	listen 443 ssl;
+	#listen 800;
+
+	ssl_certificate /etc/ssl/certs/kovic.crt;
+	ssl_certificate_key /etc/ssl/private/kovic.key;
+
+	server_name kovic.com www.kovic.com;
+
+	#index index.html index.php;
+	#root /var/www/kovic1.com/html/;
+
+	proxy_cache mycache;
+
+	location / {
+		#limit_req zone=kovic_client_limit burst=20 nodelay;
+		limit_rate_after 100m;
+                proxy_pass http://koviccluster;
+		proxy_set_header Host $http_host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto $scheme;
+		#try_files $uri $uri/ =404;
+	}
+
+	location ~* \.(jpg|jpeg|png|ico|css|js)$ {
+		proxy_pass http://koviccluster;
+		root /var/www/kovic1.com/html;
+		expires 30d;
+		access_log off;
+	}
+
+	location ~ \.(php$|html)$ {
+    		include snippets/fastcgi-php.conf;
+    		fastcgi_pass unix:/run/php/php8.1-fpm.sock;
+		proxy_pass http://koviccluster;
+		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+		include fastcgi_params;
+	}
+}
+
+server {
+	listen 80;
+	server_name kovic.com www.kovic.com;
+	return 301 https://$server_name$request_uri;
+}
