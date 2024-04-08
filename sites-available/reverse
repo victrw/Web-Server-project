@@ -4,9 +4,9 @@ limit_req_status 429;
 
 upstream koviccluster {
 		ip_hash;
-		server 127.0.0.1:5928 max_fails=3 fail_timeout=60s;
-		server 127.0.0.1:2901 max_fails=3 fail_timeout=60s;
-		server 127.0.0.1:3949 max_fails=3 fail_timeout=60s;
+		server 3.82.18.93:5928 max_fails=3 fail_timeout=60s;
+		server 3.82.18.93:2901 max_fails=3 fail_timeout=60s;
+		server 3.82.18.93:3949 max_fails=3 fail_timeout=60s;
 	}
 
 proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=mycache:10m inactive=1h loader_threshold=300 loader_files=50;
@@ -14,9 +14,9 @@ proxy_cache_methods GET HEAD;
 proxy_cache_min_uses 1;
 
 server {
-	#listen 80;
+	listen 80;
 	#listen [::]:80;
-	listen 443 ssl;
+	#listen 443 ssl;
 	#listen 800;
 
 	ssl_certificate /etc/ssl/certs/kovic.crt;
@@ -31,7 +31,7 @@ server {
 
 	location / {
 		#limit_req zone=kovic_client_limit burst=20 nodelay;
-		limit_rate_after 100m;
+		#limit_rate_after 100m;
                 proxy_pass http://koviccluster;
 		proxy_set_header Host $http_host;
 		proxy_set_header X-Real-IP $remote_addr;
@@ -54,10 +54,17 @@ server {
 		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
 		include fastcgi_params;
 	}
+
+        error_page 429 /custom_429.html;
+        location /custom_429.html {
+                root /var/www/kovic1.com/error;
+                internal;
+        }	
+
 }
 
-server {
-	listen 80;
-	server_name kovic.com www.kovic.com;
-	return 301 https://$server_name$request_uri;
-}
+#server {
+#	listen 80;
+#	server_name kovic.com www.kovic.com;
+#	return 301 https://$server_name$request_uri;
+#}

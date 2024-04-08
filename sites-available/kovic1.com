@@ -44,8 +44,8 @@ server {
         }
 
 	error_page 429 /custom_429.html;
-        location /custom_429.html {
-                root /var/www/kovic1.com/error/;
+        location = /custom_429.html {
+                root /var/www/kovic1.com/error;
                 internal;
         }
 
