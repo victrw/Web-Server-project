@@ -1,0 +1,110 @@
+#!/bin/bash
+
+# Retrieve the server's IP address
+server_ip=$(hostname -I | awk '{print $1}')
+
+# Replace the IP address associated with kovic.com in /etc/hosts
+sudo sed -i "s/^.*kovic.com/$server_ip kovic.com/g" /etc/hosts
+
+# Update package repository and install MySQL server
+sudo apt update
+sudo apt install -y mysql-server
+
+# Start MySQL service and enable it to start on boot
+sudo systemctl start mysql
+sudo systemctl enable mysql
+
+# Modify MySQL configuration
+sudo bash -c 'cat > /etc/mysql/mysql.conf.d/mysqld.cnf <<EOF2
+[mysqld]
+user                    = mysql
+bind-address            = 0.0.0.0
+mysqlx-bind-address     = 127.0.0.1
+key_buffer_size         = 16M
+myisam-recover-options  = BACKUP
+log_error               = /var/log/mysql/error.log
+max_binlog_size         = 100M
+EOF2'
+
+sudo apt install -y nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+sudo apt install -y php-mysql
+sudo apt install -y php php-fpm
+
+sudo systemctl start php8.1-fpm
+sudo systemctl enable php8.1-fpm
+
+
+# download files from github
+github clone https://github.com/victrw/Web-Server-project.git
+
+# Restart MySQL service to apply the new configuration
+sudo systemctl restart mysql
+sudo systemctl restart nginx
+
+# move and delete files
+sudo mv kovic{1..3}.com /var/www/
+sudo mv nginx.conf /etc/nginx/
+sudo rm -R /etc/nginx/sites-available
+sudo mv sites-available /etc/nginx/
+# move keys
+sudo mv kovic.crt /etc/ssl/certs/
+sudo mv kovic.key /etc/ssl/private/
+
+# edit the php fpm 
+sudo sed -i 's/^\(;security.limit_extensions\s*=\s*\).*$/\1.php .php3 .php4 .php5 .php7 .html/' /etc/php/8.1/fpm/pool.d/www.conf
+
+# Create database and user
+sudo mysql -e "CREATE DATABASE Webproject;"
+sudo mysql -e "CREATE USER 'Victor'@'%' IDENTIFIED WITH mysql_native_password BY 'Acit3420@com';"
+sudo mysql -e "GRANT ALL ON *.* TO 'Victor'@'%';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+sudo mysql -e "CREATE TABLE Webproject.product (
+    product_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_name VARCHAR(255) NOT NULL,
+    product_price DECIMAL(10, 2) NOT NULL,
+    product_quantity INT NOT NULL
+);
+"
+sudo mysql -e "INSERT INTO Webproject.product (product_name, product_price, product_quantity) 
+VALUES 
+    ('Yellow Chicken', 50, 2),
+    ('Red Chicken', 50, 1),
+    ('Cat Tower', 100, 5),
+    ('Smiski', 14, 77);
+"
+
+# Create trigger to prevent negative product quantity
+sudo mysql -e "DELIMITER //
+
+CREATE TRIGGER prevent_negative_quantity
+BEFORE UPDATE ON product
+FOR EACH ROW
+BEGIN
+    IF NEW.product_quantity < 0 THEN
+        SET NEW.product_quantity = 0;
+    END IF;
+END;
+//
+
+DELIMITER ;"
+
+# Change root password and flush privileges
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '!Acit3640';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+
+# Create links
+sudo ln -s /etc/nginx/sites-available/kovic1.com /etc/nginx/sites-enabled/kovic1.com@
+sudo ln -s /etc/nginx/sites-available/kovic2.com /etc/nginx/sites-enabled/kovic2.com@
+sudo ln -s /etc/nginx/sites-available/kovic3.com /etc/nginx/sites-enabled/kovic3.com@
+sudo ln -s /etc/nginx/sites-available/reverse /etc/nginx/sites-enabled/reverse@
+
+
+# Create directory for database backups
+sudo mkdir -p /etc/database/backup/
+
+# Backup the database
+sudo mysqldump -u root -p'!Acit3640' Webproject > /etc/database/backup/webproject_backup.sql
+
